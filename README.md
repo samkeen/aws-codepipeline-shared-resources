@@ -14,5 +14,5 @@ This includes;
 - Shared IAM Service Role for the CodePipelines
 - Shared IAM Service Role for the CodeBuild Projects
 
-The actual CodePipeline is build it a Cloudformation template held within the Serverless app repo 
+The actual CodePipeline is built via a Cloudformation template held within the Serverless app repo 
 (see: https://github.com/samkeen/aws-SAM-helloworld/blob/master/pipeline.yaml)
