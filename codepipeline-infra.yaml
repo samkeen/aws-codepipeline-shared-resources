@@ -1,0 +1,247 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+    Template to build required infra for an AWS Native CI/CD pipeline
+
+Parameters:
+
+  PipelineName:
+    Type: String
+    Default: serverless-pipeline
+    Description: Name of the pipeline
+    AllowedPattern: ^[a-z0-9-_]{1,20}$
+    ConstraintDescription: Malformed input-Parameter MyParameter must match pattern ^[a-z0-9-_]{1,20}$
+
+Resources:
+
+  PipelineS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-${AWS::Region}-pipeline-artifacts
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  LambdaS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-${AWS::Region}-lambda-packages
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  PipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${PipelineName}-pipeline-svrc-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: ['sts:AssumeRole']
+            Effect: Allow
+            Principal:
+              Service: [codepipeline.amazonaws.com]
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+        - PolicyName: CodePipelineAccess
+          PolicyDocument:
+            {
+              "Statement": [
+              {
+                "Action": [
+                  "iam:PassRole"
+                ],
+                "Resource": "*",
+                "Effect": "Allow",
+                "Condition": {
+                  "StringEqualsIfExists": {
+                    "iam:PassedToService": [
+                      "cloudformation.amazonaws.com",
+                      "elasticbeanstalk.amazonaws.com",
+                      "ec2.amazonaws.com",
+                      "ecs-tasks.amazonaws.com"
+                    ]
+                  }
+                }
+              },
+              {
+                "Action": [
+                  "codecommit:CancelUploadArchive",
+                  "codecommit:GetBranch",
+                  "codecommit:GetCommit",
+                  "codecommit:GetUploadArchiveStatus",
+                  "codecommit:UploadArchive"
+                ],
+                "Resource": "*",
+                "Effect": "Allow"
+              },
+              {
+                "Action": [
+                  "codedeploy:CreateDeployment",
+                  "codedeploy:GetApplication",
+                  "codedeploy:GetApplicationRevision",
+                  "codedeploy:GetDeployment",
+                  "codedeploy:GetDeploymentConfig",
+                  "codedeploy:RegisterApplicationRevision"
+                ],
+                "Resource": "*",
+                "Effect": "Allow"
+              },
+              {
+                "Action": [
+                  "elasticbeanstalk:*",
+                  "ec2:*",
+                  "elasticloadbalancing:*",
+                  "autoscaling:*",
+                  "cloudwatch:*",
+                  "s3:*",
+                  "sns:*",
+                  "cloudformation:*",
+                  "rds:*",
+                  "sqs:*",
+                  "ecs:*"
+                ],
+                "Resource": "*",
+                "Effect": "Allow"
+              },
+              {
+                "Action": [
+                  "lambda:InvokeFunction",
+                  "lambda:ListFunctions"
+                ],
+                "Resource": "*",
+                "Effect": "Allow"
+              },
+              {
+                "Action": [
+                  "opsworks:CreateDeployment",
+                  "opsworks:DescribeApps",
+                  "opsworks:DescribeCommands",
+                  "opsworks:DescribeDeployments",
+                  "opsworks:DescribeInstances",
+                  "opsworks:DescribeStacks",
+                  "opsworks:UpdateApp",
+                  "opsworks:UpdateStack"
+                ],
+                "Resource": "*",
+                "Effect": "Allow"
+              },
+              {
+                "Action": [
+                  "cloudformation:CreateStack",
+                  "cloudformation:DeleteStack",
+                  "cloudformation:DescribeStacks",
+                  "cloudformation:UpdateStack",
+                  "cloudformation:CreateChangeSet",
+                  "cloudformation:DeleteChangeSet",
+                  "cloudformation:DescribeChangeSet",
+                  "cloudformation:ExecuteChangeSet",
+                  "cloudformation:SetStackPolicy",
+                  "cloudformation:ValidateTemplate"
+                ],
+                "Resource": "*",
+                "Effect": "Allow"
+              },
+              {
+                "Action": [
+                  "codebuild:BatchGetBuilds",
+                  "codebuild:StartBuild"
+                ],
+                "Resource": "*",
+                "Effect": "Allow"
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "devicefarm:ListProjects",
+                  "devicefarm:ListDevicePools",
+                  "devicefarm:GetRun",
+                  "devicefarm:GetUpload",
+                  "devicefarm:CreateUpload",
+                  "devicefarm:ScheduleRun"
+                ],
+                "Resource": "*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "servicecatalog:ListProvisioningArtifacts",
+                  "servicecatalog:CreateProvisioningArtifact",
+                  "servicecatalog:DescribeProvisioningArtifact",
+                  "servicecatalog:DeleteProvisioningArtifact",
+                  "servicecatalog:UpdateProduct"
+                ],
+                "Resource": "*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "cloudformation:ValidateTemplate"
+                ],
+                "Resource": "*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "ecr:DescribeImages"
+                ],
+                "Resource": "*"
+              }
+              ],
+              "Version": "2012-10-17"
+            }
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${PipelineName}-codebuild-svrc-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+
+  CodeBuildServiceRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${PipelineName}-codebuild-svrc-role-policy
+      Roles: [ !Ref CodeBuildServiceRole ]
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:codebuild-*
+          - # access to the shared CodePipeline bucket for storing & exchanging pipeline output artifacts
+            # for a given pipeline
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:GetBucketAcl
+              - s3:GetBucketLocation
+            Resource: "*"
+
+Outputs:
+  S3BucketForAwsCodepipelineArtifacts:
+    Description: The bucket for holding our app's lambda code
+    Value: !Ref PipelineS3Bucket
+  S3BucketForAppLambdaPackages:
+    Description: The bucket for holding our app's lambda code
+    Value: !Ref LambdaS3Bucket
+  PipelineServiceRoleArn:
+    Description: The PipelineServiceRole ARN
+    Value: !GetAtt PipelineServiceRole.Arn
+  CodeBuildServiceRoleArn:
+    Description: The CodeBuild Service role ARN
+    Value: !GetAtt CodeBuildServiceRole.Arn
+
